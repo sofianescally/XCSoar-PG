@@ -52,6 +52,15 @@ DeviceDescriptor::OnLocationSensor(std::chrono::system_clock::time_point time,
   basic.UpdateClock();
   basic.alive.Update(basic.clock);
 
+  // [Aquila] GPS Week Rollover fix: chip may report dates 1024 weeks in the past.
+  // If year is between 1999 and 2019, add 1024-week blocks to correct it.
+  {
+    BrokenDateTime dt_check{time};
+    while (dt_check.year >= 1999 && dt_check.year < 2019) {
+      time += std::chrono::hours(1024 * 7 * 24); // +7168 days per block
+      dt_check = BrokenDateTime{time};
+    }
+  }
   const BrokenDateTime date_time{time};
   const BrokenDateTime midnight = date_time.AtMidnight();
   TimeStamp second_of_day{
@@ -69,9 +78,9 @@ DeviceDescriptor::OnLocationSensor(std::chrono::system_clock::time_point time,
   basic.location_available.Update(basic.clock);
 
   if (hasAltitude) {
-    auto GeoidSeparation = geoid_altitude
-      ? 0.
-      : EGM96::LookupSeparation(basic.location);
+    // [Aquila] Chip already provides EGM96-corrected altitude; skip WGS84→EGM96 correction.
+    auto GeoidSeparation = 0.;
+    (void)geoid_altitude;
     basic.gps_altitude = altitude - GeoidSeparation;
     basic.gps_altitude_available.Update(basic.clock);
   } else
