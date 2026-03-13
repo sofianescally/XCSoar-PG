@@ -369,6 +369,23 @@ NMEAParser::ReadDate(NMEAInputLine &line, BrokenDate &date)
   new_value.day = *day;
   new_value.day_of_week = -1;
 
+  // GPS Week Number Rollover correction.
+  // Receivers with outdated firmware may report a date 1024 GPS weeks
+  // (7168 days, ~19.7 years) in the past. The second rollover epoch
+  // started on 2019-04-06; any date before that anchor is invalid for
+  // a receiver operating today. Add successive 7168-day offsets until
+  // the date is plausibly post-rollover. The time (H/M/S) is untouched.
+  static constexpr BrokenDate kGpsRolloverAnchor{2019, 4, 6};
+  while (new_value < kGpsRolloverAnchor) {
+    const BrokenDateTime corrected =
+      BrokenDateTime(new_value, BrokenTime::Midnight()) +
+      std::chrono::hours(static_cast<int64_t>(7168) * 24);
+    new_value = corrected.GetDate();
+    new_value.day_of_week = -1;
+    if (!new_value.IsPlausible())
+      return false;
+  }
+
   if (!new_value.IsPlausible())
     return false;
 

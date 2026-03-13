@@ -82,10 +82,10 @@ TestGeneric()
   nmea_info.alive.Update(nmea_info.clock);
 
   /* no GPS reception */
-  ok1(parser.ParseLine("$GPRMC,082310.141,V,,,,,230610*25", nmea_info));
+  ok1(parser.ParseLine("$GPRMC,082310.141,V,,,,,230621*27", nmea_info));
   ok1(nmea_info.alive);
   ok1(!nmea_info.location_available);
-  ok1(nmea_info.date_time_utc.year == 2010);
+  ok1(nmea_info.date_time_utc.year == 2021);
   ok1(nmea_info.date_time_utc.month == 6);
   ok1(nmea_info.date_time_utc.day == 23);
   ok1(nmea_info.date_time_utc.hour == 8);
@@ -94,7 +94,7 @@ TestGeneric()
   ok1(equals(nmea_info.time, TimeStamp{FloatDuration{8 * 3600 + 23 * 60 + 10.141}}));
 
   /* got a GPS fix */
-  ok1(parser.ParseLine("$GPRMC,082311,A,5103.5403,N,00741.5742,E,055.3,022.4,230610,000.3,W*6C",
+  ok1(parser.ParseLine("$GPRMC,082311,A,5103.5403,N,00741.5742,E,055.3,022.4,230621,000.3,W*6E",
                                       nmea_info));
   ok1(nmea_info.alive);
   ok1(nmea_info.location_available);
@@ -2855,6 +2855,38 @@ TestMalformedInput()
   ok1(parser.ParseLine("$GPGSA,,,,,,,,,,,,,,,,,*6E", nmea_info));
 }
 
+static void
+TestGpsWeekRollover()
+{
+  NMEAParser parser;
+  NMEAInfo nmea_info;
+  nmea_info.Reset();
+  nmea_info.clock = TimeStamp{FloatDuration{1}};
+  nmea_info.alive.Update(nmea_info.clock);
+
+  /* 2006-07-28 is exactly 7168 days (1024 GPS weeks) before 2026-03-13.
+   * A receiver whose firmware missed the 2019 GPS week rollover would
+   * report this date instead of the correct one.  The parser must add
+   * 7168 days to obtain the real date while keeping H/M/S intact. */
+  ok1(parser.ParseLine(
+    "$GPRMC,120000,A,5103.5403,N,00741.5742,E,055.3,022.4,280706,000.3,W*6B",
+    nmea_info));
+  ok1(nmea_info.date_time_utc.year == 2026);
+  ok1(nmea_info.date_time_utc.month == 3);
+  ok1(nmea_info.date_time_utc.day == 13);
+  ok1(nmea_info.date_time_utc.hour == 12);
+  ok1(nmea_info.date_time_utc.minute == 0);
+  ok1(nmea_info.date_time_utc.second == 0);
+
+  /* A post-2019 date must not be modified. */
+  ok1(parser.ParseLine(
+    "$GPRMC,130000,A,5103.5403,N,00741.5742,E,055.3,022.4,060421,000.3,W*60",
+    nmea_info));
+  ok1(nmea_info.date_time_utc.year == 2021);
+  ok1(nmea_info.date_time_utc.month == 4);
+  ok1(nmea_info.date_time_utc.day == 6);
+}
+
 int main()
 {
   plan_tests(1032 /* drivers */ + 29 /* PFLAU extended */
@@ -2864,7 +2896,8 @@ int main()
              + 8 /* SubSecond */ + 4 /* MWVStatus */
              + 5 /* MWVRelativeTrue */ + 4 /* StallRatio */
              + 12 /* TempHumidityValidity */ + 2 /* ReadGeoAngleNoDot */
-             + 13 /* GLL */ + 20 /* GSA */ + 23 /* MalformedInput */);
+             + 13 /* GLL */ + 20 /* GSA */ + 23 /* MalformedInput */
+             + 11 /* GpsWeekRollover */);
   TestGeneric();
   TestTasman();
   TestFLARM();
@@ -2929,6 +2962,7 @@ int main()
   TestGLL();
   TestGSA();
   TestMalformedInput();
+  TestGpsWeekRollover();
 
   return exit_status();
 }
