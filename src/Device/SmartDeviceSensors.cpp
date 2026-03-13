@@ -52,10 +52,32 @@ DeviceDescriptor::OnLocationSensor(std::chrono::system_clock::time_point time,
   basic.UpdateClock();
   basic.alive.Update(basic.clock);
 
-  const BrokenDateTime date_time{time};
-  const BrokenDateTime midnight = date_time.AtMidnight();
+  const BrokenDateTime date_time_raw{time};
+  const BrokenDateTime midnight_raw = date_time_raw.AtMidnight();
   TimeStamp second_of_day{
-    duration_cast<FloatDuration>(time - midnight.ToTimePoint())};
+    duration_cast<FloatDuration>(time - midnight_raw.ToTimePoint())};
+
+  // GPS Week Number Rollover correction for Android internal GPS.
+  // The GPS chip may report a date 7168 days (~19.7 years) in the past
+  // due to the 1024-week rollover bug. Apply the same correction as in
+  // NMEAParser::ReadDate(). Ignore invalid/null dates (guard clause).
+  static constexpr BrokenDate kGpsRolloverAnchor{2019, 4, 6};
+  BrokenDate corrected_date = date_time_raw.GetDate();
+  if (corrected_date.IsPlausible()) {
+    while (corrected_date < kGpsRolloverAnchor) {
+      const BrokenDateTime shifted =
+        BrokenDateTime(corrected_date, BrokenTime::Midnight()) +
+        std::chrono::hours(static_cast<int64_t>(7168) * 24);
+      BrokenDate next = shifted.GetDate();
+      next.day_of_week = -1;
+      if (!next.IsPlausible())
+        break;
+      corrected_date = next;
+    }
+  }
+  const BrokenDateTime date_time = corrected_date.IsPlausible()
+    ? BrokenDateTime(corrected_date, date_time_raw.GetTime())
+    : date_time_raw;
 
   basic.time = second_of_day;
   basic.time_available.Update(basic.clock);
