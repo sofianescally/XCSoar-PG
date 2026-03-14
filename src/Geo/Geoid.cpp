@@ -13,9 +13,6 @@
 
 #include <cstdint>
 
-static constexpr int EGM96SIZE = 16200;
-
-extern "C" const uint8_t egm96s_dem[];
 
 double
 EGM96::LookupSeparation(const GeoPoint &pt)
