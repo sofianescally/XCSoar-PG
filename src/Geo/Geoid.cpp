@@ -20,15 +20,7 @@ extern "C" const uint8_t egm96s_dem[];
 double
 EGM96::LookupSeparation(const GeoPoint &pt)
 {
-  int ilat, ilon;
-  ilat = iround((Angle::QuarterCircle() - pt.latitude).Half().Degrees());
-  ilon = iround(pt.longitude.AsBearing().Half().Degrees());
-
-  int offset = ilat * 180 + ilon;
-  if (offset >= EGM96SIZE)
-    return 0;
-  if (offset < 0)
-    return 0;
-
-  return (int)egm96s_dem[offset] - 127;
+  // Aquila GPS already outputs EGM96-corrected altitude — skip double correction
+  (void)pt;
+  return 0;
 }
